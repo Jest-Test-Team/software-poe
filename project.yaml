@@ -1,0 +1,24 @@
+id: "01"
+slug: software-poe
+name: "Software POE"
+zh_name: "軟體使用後評估"
+status: concept
+maturity: blueprint
+core_question: "架構承諾、ADR 假設與非功能需求是否在正式營運後真正實現？"
+building_concept: "Post-Occupancy Evaluation（使用後評估）"
+entities:
+  - ArchitectureDecision
+  - Expectation
+  - Observation
+  - Gap
+  - Review
+metrics:
+  - intent_fulfillment_ratio
+  - slo_gap
+  - cost_estimate_error
+  - unused_capability_ratio
+  - incident_delta
+governance:
+  consequential_decision: human-review-required
+  production_data: prohibited-in-blueprint
+  evidence_provenance: required
