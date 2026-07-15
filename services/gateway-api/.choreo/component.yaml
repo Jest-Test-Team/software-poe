@@ -1,0 +1,11 @@
+schemaVersion: 1.1
+endpoints:
+  - name: gateway
+    displayName: Software POE Gateway
+    service:
+      basePath: /
+      port: 8081
+    type: REST
+    networkVisibilities:
+      - Public
+    schemaFilePath: ../../api/openapi.yaml

@@ -1,1 +1,30 @@
 .DS_Store
+
+# Rust
+services/review-api/target/
+
+# Node
+node_modules/
+frontend/.next/
+frontend/next-env.d.ts
+sdk/typescript/dist/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+dist/
+
+# Julia
+Manifest.toml
+
+# Flutter (platform folders are generated with `flutter create .`)
+mobile/.dart_tool/
+mobile/build/
+mobile/android/
+mobile/ios/
+mobile/pubspec.lock
+
+# Robot Framework results
+tests/results/

@@ -1,0 +1,10 @@
+{
+  "tenant_id": "intruder-tenant",
+  "project": "software-poe",
+  "source": "synthetic-fixture",
+  "observed_at": "2026-07-11T08:00:00Z",
+  "metric": "slo_gap",
+  "value": 0.01,
+  "schema_version": "0.1.0",
+  "attributes": { "adversarial": true, "case": "unregistered tenant must be refused" }
+}

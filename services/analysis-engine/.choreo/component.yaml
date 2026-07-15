@@ -1,0 +1,10 @@
+schemaVersion: 1.1
+endpoints:
+  - name: analysis
+    displayName: Software POE Analysis Engine
+    service:
+      basePath: /
+      port: 8082
+    type: REST
+    networkVisibilities:
+      - Project

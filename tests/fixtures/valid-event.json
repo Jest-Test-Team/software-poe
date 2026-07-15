@@ -1,0 +1,11 @@
+{
+  "tenant_id": "synthetic-lab",
+  "project": "software-poe",
+  "source": "synthetic-fixture",
+  "observed_at": "2026-07-11T08:00:00Z",
+  "metric": "intent_fulfillment_ratio",
+  "value": 0.42,
+  "unit": "ratio",
+  "schema_version": "0.1.0",
+  "attributes": { "synthetic": true }
+}

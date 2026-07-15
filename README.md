@@ -62,7 +62,24 @@
 - `schemas/event.schema.json`：事件資料契約
 - `docs/architecture.md`：邊界、資料流與 implementation slices
 - `docs/threat-model.md`：安全、隱私與濫用風險
+- `docs/implementation-plan.md`：實作計畫（stack、部署、發佈）
 - `examples/sample-event.json`：合成資料範例
+
+## Implementation layout
+
+- `services/`：3 個後端服務（Go gateway、Python+Julia analysis、Rust review），各含 Dockerfile，部署於 Choreo；資料庫為 Neon (Postgres)
+- `frontend/`：Next.js（Vercel）
+- `mobile/`：Flutter 覆核用 companion app
+- `sdk/`：python（PyPI `software-poe`）、typescript（npm `@dennislee928/software-poe`）、go、julia（`SoftwarePOE.jl`）
+- `tests/robot/`：Robot Framework 黑箱測試
+- `.github/workflows/`：CI、Robot、四種套件發佈
+
+### Local development
+
+```bash
+docker compose up -d --build   # postgres + 3 services；gateway 於 :8081（X-API-Key: local-dev-key）
+cd frontend && npm install && npm run dev
+```
 
 ## First implementation milestone
 

@@ -1,0 +1,10 @@
+schemaVersion: 1.1
+endpoints:
+  - name: review
+    displayName: Software POE Review API
+    service:
+      basePath: /
+      port: 8083
+    type: REST
+    networkVisibilities:
+      - Project

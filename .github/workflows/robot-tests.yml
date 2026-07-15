@@ -1,0 +1,36 @@
+name: Robot Framework
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  robot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start stack
+        run: docker compose up -d --build
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install robotframework robotframework-requests
+      - name: Wait for gateway
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8081/healthz && exit 0
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      - name: Run suites
+        run: robot --outputdir tests/results tests/robot
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: robot-report
+          path: tests/results
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose logs
