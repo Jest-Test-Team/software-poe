@@ -62,9 +62,12 @@ export function validateEvent(event: Event): string[] {
 }
 
 export class ValidationError extends Error {
-  constructor(public errors: string[]) {
+  errors: string[];
+
+  constructor(errors: string[]) {
     super(errors.join("; "));
     this.name = "ValidationError";
+    this.errors = errors;
   }
 }
 

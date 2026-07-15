@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: poe
+      POSTGRES_PASSWORD: poe
+      POSTGRES_DB: software_poe
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U poe -d software_poe"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  gateway-api:
+    build:
+      context: .
+      dockerfile: services/gateway-api/Dockerfile
+    environment:
+      DATABASE_URL: postgres://poe:poe@postgres:5432/software_poe
+      API_KEY: local-dev-key
+      REVIEW_API_URL: http://review-api:8083
+      ANALYSIS_API_URL: http://analysis-engine:8082
+      PORT: "8081"
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  analysis-engine:
+    build:
+      context: services/analysis-engine
+    environment:
+      DATABASE_URL: postgres://poe:poe@postgres:5432/software_poe
+      PORT: "8082"
+    depends_on:
+      gateway-api:
+        condition: service_started
+
+  review-api:
+    build:
+      context: services/review-api
+    environment:
+      DATABASE_URL: postgres://poe:poe@postgres:5432/software_poe
+      PORT: "8083"
+    depends_on:
+      gateway-api:
+        condition: service_started

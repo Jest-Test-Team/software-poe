@@ -1,3 +1,5 @@
 .DS_Store
 /services/review-api/target/debug/.fingerprint
 /services/review-api/target/debug
+/frontend/.next
+/frontend/node_modules

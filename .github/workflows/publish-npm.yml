@@ -1,0 +1,23 @@
+name: Publish npm package
+
+on:
+  push:
+    tags: ["npm-v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+      - name: Test before publishing
+        run: npm install && npm run build && npm test
+        working-directory: sdk/typescript
+      - name: Publish @dennislee928/software-poe
+        run: npm publish --access public
+        working-directory: sdk/typescript
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

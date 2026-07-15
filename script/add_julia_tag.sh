@@ -16,7 +16,7 @@ README.md when missing.
 Options:
   --push       Push the generated commit back to each repository.
   --cleanup    Remove the temporary clone directory when finished.
-  --limit N    Process only the first N matching repositories.
+  --limit N    Process only the first N matching repositories. N must be >= 1.
   -h, --help   Show this help.
 
 By default the script commits only inside a temporary directory and does not push.
@@ -34,8 +34,8 @@ while [ "$#" -gt 0 ]; do
             shift
             ;;
         --limit)
-            if [ "$#" -lt 2 ] || ! [[ "$2" =~ ^[0-9]+$ ]]; then
-                echo "ERROR: --limit requires a non-negative integer." >&2
+            if [ "$#" -lt 2 ] || ! [[ "$2" =~ ^[1-9][0-9]*$ ]]; then
+                echo "ERROR: --limit requires a positive integer." >&2
                 exit 2
             fi
             LIMIT="$2"

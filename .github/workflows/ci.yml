@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  gateway-api:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: services/gateway-api } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: services/gateway-api/go.sum
+      - run: go vet ./...
+      - run: go build ./...
+      - run: go test ./...
+
+  analysis-engine:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: services/analysis-engine } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install .[dev]
+      - run: pytest -q
+      - uses: julia-actions/setup-julia@v2
+        with: { version: "1.11" }
+      - name: Julia worker syntax check
+        run: |
+          julia --project=julia -e 'using Pkg; Pkg.instantiate()'
+          julia --project=julia -e 'include("julia/metrics.jl"); using .Metrics;
+            @assert Metrics.evaluate("slo_gap", 0.5, 0.05, "<=").gap_detected'
+
+  review-api:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: services/review-api } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: clippy }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: services/review-api }
+      - run: cargo clippy -- -D warnings
+      - run: cargo test
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: frontend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: npm ci || npm install
+      - run: npm run typecheck
+      - run: npm run build
+
+  mobile:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: mobile } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable }
+      - run: flutter pub get
+      - run: flutter analyze
+
+  sdks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: false
+      - run: go test ./...
+        working-directory: sdk/go
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install .[dev] && pytest -q
+        working-directory: sdk/python
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: npm install && npm run build && npm test
+        working-directory: sdk/typescript
+      - uses: julia-actions/setup-julia@v2
+        with: { version: "1.11" }
+      - run: julia --project=sdk/julia -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+
+  docker-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the 3 Choreo images
+        run: |
+          docker build -f services/gateway-api/Dockerfile -t poe-gateway .
+          docker build -t poe-analysis services/analysis-engine
+          docker build -t poe-review services/review-api

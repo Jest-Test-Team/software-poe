@@ -1,0 +1,25 @@
+name: Publish Go module
+
+# Go "publishing" = pushing a tag; this workflow gates the tag with tests and
+# then warms the public module proxy so `go get` resolves immediately.
+on:
+  push:
+    tags: ["sdk/go/v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: false
+      - name: Test before announcing
+        run: go vet ./... && go test ./...
+        working-directory: sdk/go
+      - name: Warm proxy.golang.org
+        run: |
+          VERSION="${GITHUB_REF_NAME#sdk/go/}"
+          GOPROXY=proxy.golang.org go list -m \
+            "github.com/Jest-Test-Team/software-poe/sdk/go@${VERSION}"

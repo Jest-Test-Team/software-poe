@@ -1,0 +1,25 @@
+name: Publish Python package
+
+on:
+  push:
+    tags: ["py-v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # PyPI trusted publishing (configure on pypi.org for this repo/workflow)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Test before publishing
+        run: pip install .[dev] && pytest -q
+        working-directory: sdk/python
+      - name: Build
+        run: pipx run build
+        working-directory: sdk/python
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk/python/dist
