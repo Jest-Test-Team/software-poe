@@ -15,12 +15,12 @@ function claim_job(conn)
         WHERE id = (SELECT id FROM analysis_jobs WHERE status = 'pending'
                     ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED)
         RETURNING id, event_id""")
-    rows = rowtable(result)
+    rows = Tables.rowtable(result)
     isempty(rows) ? nothing : rows[1]
 end
 
 function load_event(conn, event_id)
-    rows = rowtable(execute(conn,
+    rows = Tables.rowtable(execute(conn,
         """SELECT id, tenant_id, metric, value, evidence_ref,
                   extract(epoch from observed_at) AS observed_epoch
            FROM events WHERE id = \$1""", [event_id]))
@@ -28,7 +28,7 @@ function load_event(conn, event_id)
 end
 
 function load_expectation(conn, tenant_id, metric)
-    rows = rowtable(execute(conn,
+    rows = Tables.rowtable(execute(conn,
         """SELECT id, expected_value, comparator, rule_version FROM expectations
            WHERE tenant_id = \$1 AND metric = \$2 AND rule_version = \$3""",
         [tenant_id, metric, RULE_VERSION]))
@@ -54,7 +54,7 @@ function process_job(conn, job)
     try
         gap_id = nothing
         if has_expectation
-            rows = rowtable(execute(conn,
+            rows = Tables.rowtable(execute(conn,
                 """INSERT INTO gaps (tenant_id, event_id, expectation_id, metric,
                                      expected_value, actual_value, gap_value)
                    VALUES (\$1,\$2,\$3,\$4,\$5,\$6,\$7) RETURNING id""",
@@ -73,7 +73,7 @@ function process_job(conn, job)
         execute(conn,
             """INSERT INTO audit_entries (tenant_id, actor, action, object_type, object_id, payload_hash)
                VALUES (\$1,'analysis-engine','assess','event',\$2,\$3)""",
-            [event.tenant_id, string(event.id), something(event.evidence_ref, "sha256:unknown")])
+            [event.tenant_id, string(event.id), coalesce(event.evidence_ref, "sha256:unknown")])
         execute(conn, "UPDATE analysis_jobs SET status = 'done', updated_at = now() WHERE id = \$1", [job.id])
         execute(conn, "COMMIT")
     catch e
