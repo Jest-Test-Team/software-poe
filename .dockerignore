@@ -1,0 +1,15 @@
+# Gateway image builds from the repo root (needs services/gateway-api + db/migrations).
+# Keep the context small.
+.git
+frontend
+mobile
+sdk
+tests
+docs
+examples
+services/review-api/target
+services/analysis-engine
+**/node_modules
+**/.next
+**/dist
+**/__pycache__

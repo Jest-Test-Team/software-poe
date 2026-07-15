@@ -1,10 +1,12 @@
 openapi: 3.1.0
 info:
-  title: Software POE Blueprint API
+  title: Software POE Gateway API
   version: 0.1.0
-  description: Synthetic-data, human-review-oriented starter contract.
+  description: Synthetic-data, human-review-oriented contract, served by services/gateway-api.
 servers:
   - url: http://localhost:8081
+security:
+  - apiKey: []
 paths:
   /v1/software-poe/events:
     post:
@@ -19,9 +21,34 @@ paths:
       responses:
         '202':
           description: Accepted for validation and analysis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event_id: { type: string, format: uuid }
+                  evidence_ref: { type: string }
+                  status: { type: string }
+        '400':
+          description: Schema validation errors
+        '401':
+          description: Invalid API key
+        '403':
+          description: Unknown tenant
   /v1/software-poe/assessments:
     get:
       summary: List explainable assessments
+      operationId: listSoftwarePOEAssessments
+      parameters:
+        - name: tenant_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, review-required, accepted, rejected]
       responses:
         '200':
           description: Assessment list
@@ -31,29 +58,77 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Assessment'
+  /v1/software-poe/assessments/{id}/review:
+    post:
+      summary: Record a human review decision
+      operationId: reviewSoftwarePOEAssessment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: tenant_id
+          in: query
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reviewer, decision]
+              properties:
+                reviewer: { type: string }
+                decision: { type: string, enum: [accepted, rejected] }
+                annotation: { type: string }
+      responses:
+        '200':
+          description: Review recorded
+        '400':
+          description: Missing reviewer or invalid decision
+        '409':
+          description: Not found for tenant or already decided
 components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Choreo-managed API key in production; static key in local dev.
   schemas:
     Event:
       type: object
-      required: [tenant_id, source, observed_at, metric, value, schema_version]
+      required: [tenant_id, project, source, observed_at, metric, value, schema_version]
       properties:
         tenant_id: { type: string }
+        project: { type: string, const: software-poe }
         source: { type: string }
         observed_at: { type: string, format: date-time }
         metric: { type: string, example: intent_fulfillment_ratio }
         value: { type: number }
         unit: { type: string }
-        schema_version: { type: string, example: '0.1.0' }
+        schema_version: { type: string, const: '0.1.0' }
         evidence_ref: { type: string }
+        attributes:
+          type: object
+          additionalProperties:
+            type: [string, number, boolean, 'null']
     Assessment:
       type: object
-      required: [assessment_id, status, evidence_refs, human_review_required]
+      required: [assessment_id, tenant_id, status, evidence_refs, human_review_required]
       properties:
-        assessment_id: { type: string }
+        assessment_id: { type: string, format: uuid }
+        tenant_id: { type: string }
         status: { type: string, enum: [draft, review-required, accepted, rejected] }
         summary: { type: string }
         uncertainty: { type: number, minimum: 0, maximum: 1 }
+        gap_detected: { type: boolean }
+        missing_data: { type: boolean }
+        stale_evidence: { type: boolean }
+        rule_version: { type: [string, 'null'] }
         evidence_refs:
           type: array
           items: { type: string }
         human_review_required: { type: boolean, const: true }
+        created_at: { type: string, format: date-time }

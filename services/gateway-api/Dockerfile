@@ -1,5 +1,5 @@
 # Build context: repository root (needs db/migrations).
-FROM golang:1.24-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY services/gateway-api/go.mod services/gateway-api/go.sum ./
 RUN go mod download
