@@ -1,69 +1,204 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# 1. 檢查是否已安裝 GitHub CLI
-if ! command -v gh &> /dev/null; then
-    echo "❌ 錯誤：請先安裝 GitHub CLI 並執行 'gh auth login' 登入"
+PUSH=0
+KEEP_TEMP=1
+LIMIT=""
+
+usage() {
+    cat <<'USAGE'
+Usage: script/add_julia_tag.sh [--push] [--cleanup] [--limit N]
+
+Find GitHub repositories the authenticated user has contributed to, filter those
+whose GitHub language metadata includes Julia, and append official Julia links to
+README.md when missing.
+
+Options:
+  --push       Push the generated commit back to each repository.
+  --cleanup    Remove the temporary clone directory when finished.
+  --limit N    Process only the first N matching repositories.
+  -h, --help   Show this help.
+
+By default the script commits only inside a temporary directory and does not push.
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --push)
+            PUSH=1
+            shift
+            ;;
+        --cleanup)
+            KEEP_TEMP=0
+            shift
+            ;;
+        --limit)
+            if [ "$#" -lt 2 ] || ! [[ "$2" =~ ^[0-9]+$ ]]; then
+                echo "ERROR: --limit requires a non-negative integer." >&2
+                exit 2
+            fi
+            LIMIT="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "ERROR: Unknown option: $1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+if ! command -v gh >/dev/null 2>&1; then
+    echo "ERROR: Please install GitHub CLI and run 'gh auth login' first." >&2
     exit 1
 fi
 
-# 2. 取得當前登入的使用者名稱 (過濾掉雙引號與換行符號，確保字串純淨)
-USERNAME=$(gh api user -q ".login" | tr -d '"' | tr -d '\r' | tr -d '\n')
-echo "🔍 正在搜尋 @$USERNAME 擁有且包含 Julia 語言的專案..."
+if ! command -v git >/dev/null 2>&1; then
+    echo "ERROR: git is required." >&2
+    exit 1
+fi
 
-# 3. 搜尋符合條件的 repo (使用 owner: 代替 user: 更為精準)
-REPOS=$(gh search repos "owner:$USERNAME language:julia" --json fullName --jq '.[].fullName')
+if ! gh auth status >/dev/null 2>&1; then
+    echo "ERROR: GitHub CLI is not authenticated. Run 'gh auth login' first." >&2
+    exit 1
+fi
+
+USERNAME=$(gh api user --jq ".login" | tr -d '\r\n')
+echo "Searching @$USERNAME contributed repositories whose GitHub language metadata includes Julia..."
+
+GRAPHQL_QUERY='
+query($endCursor: String) {
+  viewer {
+    repositoriesContributedTo(
+      first: 100
+      after: $endCursor
+      includeUserRepositories: true
+      contributionTypes: [COMMIT, PULL_REQUEST, REPOSITORY, PULL_REQUEST_REVIEW]
+    ) {
+      nodes {
+        nameWithOwner
+        defaultBranchRef {
+          name
+        }
+        languages(first: 50, orderBy: {field: SIZE, direction: DESC}) {
+          nodes {
+            name
+          }
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}'
+
+REPOS=$(gh api graphql --paginate -f query="$GRAPHQL_QUERY" \
+    --jq '.data.viewer.repositoriesContributedTo.nodes[]
+          | select(.defaultBranchRef != null)
+          | select([.languages.nodes[].name] | index("Julia"))
+          | .nameWithOwner' | sort -u)
 
 if [ -z "$REPOS" ]; then
-    echo "⚠️ 沒有找到任何包含 Julia 的專案。請確認專案的 GitHub 語言統計是否正確識別為 Julia。"
+    echo "No contributed repositories with Julia language metadata were found."
+    echo "Check each repository's GitHub language statistics if you expected matches."
     exit 0
 fi
 
-# 4. 建立一個安全的暫存目錄來進行 Git 操作
+if [ -n "$LIMIT" ]; then
+    REPOS=$(printf '%s\n' "$REPOS" | head -n "$LIMIT")
+fi
+
+echo "Matching repositories:"
+printf '  - %s\n' $REPOS
+
 TEMP_DIR=$(mktemp -d)
-echo "📁 建立暫存工作目錄: $TEMP_DIR"
+echo "Temporary clone directory: $TEMP_DIR"
 
-# 5. 開始迴圈處理每一個專案
-for REPO in $REPOS; do
+cleanup() {
+    if [ "$KEEP_TEMP" -eq 0 ]; then
+        rm -rf "$TEMP_DIR"
+    fi
+}
+trap cleanup EXIT
+
+TAG_BLOCK='
+
+---
+Julia language: [#JuliaLang](https://julialang.org/) | [JuliaLang GitHub](https://github.com/JuliaLang/julia)
+'
+
+processed=0
+changed=0
+skipped=0
+failed=0
+
+printf '%s\n' "$REPOS" | while IFS= read -r REPO; do
+    [ -n "$REPO" ] || continue
+
+    processed=$((processed + 1))
+    REPO_DIR="$TEMP_DIR/${REPO//\//__}"
+
     echo "========================================"
-    # 利用 basename 擷取 fullName (owner/repo) 中的 repo 名稱
-    REPO_NAME=$(basename "$REPO")
-    echo "🚀 正在處理: $REPO"
-    
-    cd "$TEMP_DIR" || exit
-    
-    # 下載專案 (使用 gh repo clone 支援 HTTPS/SSH 自動驗證，並使用 --depth 1 加快速度)
-    gh repo clone "$REPO" -- --depth 1
-    cd "$REPO_NAME" || continue
+    echo "Processing: $REPO"
 
-    # 檢查 README.md 是否存在 (考慮大小寫)
-    README_FILE=$(ls | grep -i '^readme\.md$' | head -n 1)
+    if ! gh repo clone "$REPO" "$REPO_DIR" -- --depth 1; then
+        echo "WARN: clone failed for $REPO; skipping." >&2
+        failed=$((failed + 1))
+        continue
+    fi
 
+    cd "$REPO_DIR"
+
+    README_FILE=$(find . -maxdepth 1 -type f -iname 'readme.md' -print -quit)
     if [ -z "$README_FILE" ]; then
-        echo "⏭️ 找不到 README.md，跳過此專案。"
+        echo "Skipped: README.md was not found at repository root."
+        skipped=$((skipped + 1))
+        continue
+    fi
+    README_FILE=${README_FILE#./}
+
+    if grep -qi '#JuliaLang' "$README_FILE" \
+        && grep -qi 'https://julialang.org/' "$README_FILE" \
+        && grep -qi 'https://github.com/JuliaLang/julia' "$README_FILE"; then
+        echo "Skipped: README already contains #JuliaLang and both official links."
+        skipped=$((skipped + 1))
         continue
     fi
 
-    # 檢查是否已經加過標籤，避免重複附加
-    if grep -iq "#JuliaLang" "$README_FILE"; then
-        echo "✅ 已經包含 #JuliaLang 標籤，跳過..."
-        continue
-    fi
+    printf '%s' "$TAG_BLOCK" >> "$README_FILE"
 
-    # 6. 將標籤與連結附加到 README 檔案最下方
-    printf "\n\n---\n*Powered by [#JuliaLang](https://julialang.org/) ⚡*\n" >> "$README_FILE"
-
-    # 7. Git 提交
     git add "$README_FILE"
-    git commit -m "docs: append #JuliaLang official hashtag and website link"
-    
-    # ⚠️ 安全機制：預設先將 git push 註解掉。
-    # 建議您先跑一次，去暫存資料夾確認沒問題後，再把下面這行的註解拿掉
-    # git push 
+    if git diff --cached --quiet; then
+        echo "Skipped: no staged README changes."
+        skipped=$((skipped + 1))
+        continue
+    fi
 
-    echo "🎉 $REPO_NAME 處理完成！"
+    git commit -m "docs: add JuliaLang official links to README"
+    changed=$((changed + 1))
+
+    if [ "$PUSH" -eq 1 ]; then
+        git push
+        echo "Pushed: $REPO"
+    else
+        echo "Committed locally only. Re-run with --push to update GitHub."
+    fi
 done
 
 echo "========================================"
-echo "🏁 所有專案處理完畢！"
-echo "請至 $TEMP_DIR 檢查修改結果。若一切正確，請取消腳本中 git push 的註解並重新執行。"
-# rm -rf "$TEMP_DIR"
+echo "Done."
+echo "Processed: $processed"
+echo "Changed:   $changed"
+echo "Skipped:   $skipped"
+echo "Failed:    $failed"
+
+if [ "$KEEP_TEMP" -eq 1 ]; then
+    echo "Review temporary clones at: $TEMP_DIR"
+fi
