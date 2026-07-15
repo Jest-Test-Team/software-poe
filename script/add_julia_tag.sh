@@ -63,12 +63,11 @@ if ! command -v git >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! gh auth status >/dev/null 2>&1; then
-    echo "ERROR: GitHub CLI is not authenticated. Run 'gh auth login' first." >&2
+if ! USERNAME=$(gh api user --jq ".login" 2>/dev/null | tr -d '\r\n'); then
+    echo "ERROR: GitHub CLI cannot access the GitHub API. Run 'gh auth login' first." >&2
     exit 1
 fi
 
-USERNAME=$(gh api user --jq ".login" | tr -d '\r\n')
 echo "Searching @$USERNAME contributed repositories whose GitHub language metadata includes Julia..."
 
 GRAPHQL_QUERY='
@@ -139,7 +138,7 @@ changed=0
 skipped=0
 failed=0
 
-printf '%s\n' "$REPOS" | while IFS= read -r REPO; do
+while IFS= read -r REPO; do
     [ -n "$REPO" ] || continue
 
     processed=$((processed + 1))
@@ -190,7 +189,7 @@ printf '%s\n' "$REPOS" | while IFS= read -r REPO; do
     else
         echo "Committed locally only. Re-run with --push to update GitHub."
     fi
-done
+done < <(printf '%s\n' "$REPOS")
 
 echo "========================================"
 echo "Done."
