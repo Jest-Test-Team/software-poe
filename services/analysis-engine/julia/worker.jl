@@ -52,7 +52,7 @@ function process_job(conn, job)
 
     execute(conn, "BEGIN")
     try
-        gap_id = nothing
+        gap_id = missing  # LibPQ maps `missing` (not `nothing`) to SQL NULL
         if has_expectation
             rows = Tables.rowtable(execute(conn,
                 """INSERT INTO gaps (tenant_id, event_id, expectation_id, metric,
@@ -68,7 +68,7 @@ function process_job(conn, job)
                                         rule_version, evidence_refs)
                VALUES (\$1,\$2,'review-required',\$3,\$4,\$5,\$6,\$7,\$8, ARRAY[\$9])""",
             [event.tenant_id, gap_id, summary, uncertainty, result.gap_detected,
-             !has_expectation, stale, has_expectation ? expectation.rule_version : nothing,
+             !has_expectation, stale, has_expectation ? expectation.rule_version : missing,
              event.evidence_ref])
         execute(conn,
             """INSERT INTO audit_entries (tenant_id, actor, action, object_type, object_id, payload_hash)
@@ -104,4 +104,6 @@ function main()
     end
 end
 
-abspath(PROGRAM_FILE) == @__FILE__ && main()
+if abspath(PROGRAM_FILE) == abspath(@__FILE__)
+    main()
+end
